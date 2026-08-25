@@ -1,0 +1,66 @@
+export type CityRole = "train" | "holdout" | "transfer";
+
+export type City = {
+  id: string;
+  name: string;
+  role: CityRole;
+  timezone: string;
+  coverage_validated: boolean;
+  center_lat: number;
+  center_lon: number;
+  bbox: { west: number; south: number; east: number; north: number };
+};
+
+export type UrbanFormFeatures = {
+  canopy_frac: number;
+  asphalt_frac: number;
+  sky_frac: number;
+  building_frac: number;
+};
+
+export type Segment = {
+  image_id: string;
+  lat: number;
+  lon: number;
+  city: string;
+  block_id: string;
+  delta_t: number;
+  split: string;
+  source: string;
+  validated: boolean;
+  features: UrbanFormFeatures;
+};
+
+export type Capabilities = {
+  segments: boolean;
+  fortyguard: boolean;
+  mapillary: boolean;
+  coefficients: boolean;
+  model: boolean;
+  model_name: string | null;
+};
+
+export type Health = {
+  status: string;
+  version: string;
+  capabilities: Capabilities;
+};
+
+export type ApiError = {
+  error: boolean;
+  code: string;
+  message: string;
+};
+
+export type RecommendItem = {
+  image_id: string;
+  lat: number;
+  lon: number;
+  current_delta_t: number;
+  current_canopy_frac: number;
+  target_canopy_frac: number;
+  estimated_delta_t: number;
+  estimated_cooling_c: number;
+  indicative: boolean;
+  validated: boolean;
+};
