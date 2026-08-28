@@ -9,6 +9,9 @@ from heatlens.store import JsonSegmentStore
 
 
 def _client(tmp_path, monkeypatch, coefficients=None, segments=None):
+    # Isolate from a real .env in the repo root — heatlens.config._load_dotenv()
+    # reads whatever .env is in cwd, which would silently undo delenv() below.
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HEATLENS_SEGMENTS_PATH", str(tmp_path / "segments.json"))
     monkeypatch.setenv("HEATLENS_COEFFICIENTS_PATH", str(tmp_path / "coefficients.json"))
     monkeypatch.setenv("HEATLENS_CACHE_PATH", str(tmp_path / "cache.sqlite"))

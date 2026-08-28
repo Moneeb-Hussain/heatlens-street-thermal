@@ -102,11 +102,23 @@ class FortyGuardClient(object):
 
     def _poll(self, activity_id, poll_seconds, max_polls):
         path = "/v1/status/{0}".format(activity_id)
-        for _ in range(max_polls):
+        for attempt in range(max_polls):
             try:
                 response = self._client.get(path)
             except httpx.HTTPError as exc:
                 raise UpstreamError("FortyGuard poll failed: {0}".format(_safe(exc))) from exc
+            if response.status_code == 404:
+                # Freshly submitted activities can be briefly unqueryable right
+                # after /v1/heatmap returns an activity_id (seen on newly
+                # created accounts). Not a real failure unless it never clears.
+                if attempt == max_polls - 1:
+                    raise UpstreamError(
+                        "FortyGuard activity {0} never became queryable (still 404 after {1} polls)".format(
+                            activity_id, max_polls
+                        )
+                    )
+                time.sleep(poll_seconds)
+                continue
             data = _decode(response)
             body = data.get("data") or {}
             status = str(body.get("status") or data.get("message") or "").lower()
@@ -119,9 +131,23 @@ class FortyGuardClient(object):
 
 
 def parse_tile_temperature(feature):
-    """Best-effort read of a heatmap tile. Property names are not fully documented."""
+    """Read a heatmap tile's temperature.
+
+    Confirmed against a real (non-empty) response 2026-08-28: each feature's
+    `properties` carries `average_temperature` (plus `min_temperature` /
+    `max_temperature`) directly -- not nested under a `Temperature_stats`
+    object as originally guessed. Keeping the old candidate keys as a
+    fallback in case a different city/plan tier shapes it differently.
+    """
     props = feature.get("properties") or {}
-    for key in ("temperature", "Temperature", "tcm", "temp", "value"):
+    for key in (
+        "average_temperature",
+        "temperature",
+        "Temperature",
+        "tcm",
+        "temp",
+        "value",
+    ):
         if key in props and props[key] is not None:
             return float(props[key])
     stats = props.get("Temperature_stats") or props.get("temperature_stats") or {}
@@ -131,13 +157,30 @@ def parse_tile_temperature(feature):
 
 
 def city_mean_from_stats(result):
+    """City-wide mean temperature from a heatmap result's `stats_data`.
+
+    NOTE: as of 2026-08-28 we've only ever seen `stats_data` populated with
+    `activity_id` / `n_cells` (real tile data lives under `map_data`, see
+    parse_tile_temperature). Whether FortyGuard's `stats_data` ever carries
+    a city-wide mean at all -- and under what key -- is still unconfirmed.
+    The candidate keys below are checked but NOT invented from nothing: if
+    none match, this raises rather than guessing, per the project's
+    never-fabricate-a-temperature rule. If this keeps raising once real
+    `n_cells > 0` data is flowing, fall back to computing the mean from the
+    tile temperatures in `map_data` instead (see ingest/fortyguard.py).
+    """
     stats = (result or {}).get("stats_data") or {}
     temp_stats = stats.get("Temperature_stats") or stats.get("temperature_stats") or stats
     mean = None
     if isinstance(temp_stats, dict):
-        mean = temp_stats.get("Mean") or temp_stats.get("mean")
+        mean = (
+            temp_stats.get("Mean")
+            or temp_stats.get("mean")
+            or temp_stats.get("average_temperature")
+            or temp_stats.get("mean_temperature")
+        )
     if mean is None:
-        raise ValidationFailed("heatmap stats_data has no Mean")
+        raise ValidationFailed("heatmap stats_data has no recognised mean-temperature field")
     return float(mean)
 
 

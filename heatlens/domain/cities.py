@@ -51,8 +51,9 @@ class City:
 CITIES = (
     City("phoenix", "Phoenix", "train", downtown_bbox(33.4484, -112.0740), "America/Phoenix", True, (33.4484, -112.0740)),
     City("atlanta", "Atlanta", "train", downtown_bbox(33.7490, -84.3880), "America/New_York", True, (33.7490, -84.3880)),
-    City("houston", "Houston", "train", downtown_bbox(29.7604, -95.3698), "America/Chicago", True, (29.7604, -95.3698)),
-    City("miami", "Miami", "holdout", downtown_bbox(25.7617, -80.1918), "America/New_York", True, (25.7617, -80.1918)),
+    City("chicago", "Chicago", "train", downtown_bbox(41.8781, -87.6298), "America/Chicago", True, (41.8781, -87.6298)),  # added per Moneeb 2026-08-27: Atlanta+Chicago locked as the 2 train cities
+    City("houston", "Houston", "train", downtown_bbox(29.7604, -95.3698), "America/Chicago", True, (29.7604, -95.3698)),  # role still "train" but Moneeb decided to drop it (panorama-dominated coverage) -- not actively pulling, left as-is pending a decision on whether to formally recode its role
+    City("miami", "Miami", "holdout", downtown_bbox(25.7617, -80.1918, half_km=2.0), "America/New_York", True, (25.7617, -80.1918)),  # bbox widened ~25% (1.6->2.0km) per Moneeb 2026-08-25: coverage-limited, not filter-limited
     City("karachi", "Karachi", "transfer", downtown_bbox(24.8607, 67.0011), "Asia/Karachi", False, (24.8607, 67.0011)),
     City("lahore", "Lahore", "transfer", downtown_bbox(31.5204, 74.3587), "Asia/Karachi", False, (31.5204, 74.3587)),
 )
