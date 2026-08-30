@@ -1,26 +1,28 @@
 # HeatLens
 
-Street photos + FortyGuard street ΔT → map the hottest streets → rank where extra canopy would cut ΔT most.
+A **street lens** on urban heat: each map marker is one photographed street, not a city-wide blob.
 
-Demo cities: **Atlanta** and **Chicago**. Temperatures are never invented.
+FortyGuard gives that point’s ΔT vs the city mean. The photo is read for canopy, asphalt, sky, and buildings. Together they show **which street is running hot** and where extra trees would move it.
+
+Demo: **Atlanta** and **Chicago** (2411 streets). Live °C is FortyGuard only — never invented.
 
 ---
 
 ## What is actually built
 
-| Piece | What it does | What it is not |
-|---|---|---|
-| Map (`web/`) | OpenFreeMap + coloured street markers from labelled ΔT | Live hourly weather map |
-| Street panel | Name (Photon/Nominatim), ΔT, Urban Form bars, Action | 12-hour forecast bars |
-| SegFormer-B0 (frozen) | Photo → canopy / asphalt / sky / building fractions | A trained heat vision net |
-| OLS (`coefficients.json`) | `ΔT = a + b·canopy + c·asphalt + d·sky + e·building` | Per-city models; deep learning |
-| `/forecast` | One **lagged** FortyGuard citywide mean (~7 days) | Synthetic 12-hour series |
-| `/recommend` | `cooling ≈ −β_canopy × (0.40 − current canopy)` | Causal “trees will cool X°C” |
-| `/validate` | Linear ΔT vs FortyGuard labelled ΔT | Proof the model generalises |
+| Piece | What it does |
+|---|---|
+| Map (`web/`) | One coloured marker per street, from labelled FortyGuard ΔT |
+| Street panel | OSM name, ΔT vs city, urban-form bars, canopy action for **that** street |
+| SegFormer-B0 (frozen) | Street photo → canopy / asphalt / sky / building fractions |
+| OLS (`coefficients.json`) | `ΔT = a + b·canopy + c·asphalt + d·sky + e·building` (pooled ATL+CHI) |
+| `/forecast` | One lagged FortyGuard citywide mean (~7 days) |
+| `/recommend` | `cooling ≈ −β_canopy × (0.40 − current canopy)` on the selected street |
+| `/validate` | Linear ΔT vs FortyGuard labelled ΔT |
 
-**Shipped numbers (pooled Atlanta + Chicago):** 2411 streets (1525 ATL + 886 CHI). Canopy coeff ≈ **−1.12**. Test R² is near zero / negative — map dots use **FortyGuard labels**, not the linear prediction.
+**Shipped numbers:** 1525 Atlanta + 886 Chicago. Canopy coeff ≈ **−1.12**. Test R² is near zero / negative — **map dots are FortyGuard labels**, not the linear prediction.
 
-**Formula we serve:** `T_street(t) = FortyGuard city snapshot(t) + ΔT_street`. City snapshot needs a per-state API key. ΔT on the map comes from the label file even if the key is missing.
+**Serve formula:** `T_street(t) = FortyGuard city snapshot(t) + ΔT_street`. Snapshot needs a per-state API key. Street ΔT still shows if the key is missing.
 
 ---
 
@@ -304,12 +306,12 @@ Responses are cached in `data/cache/heatlens.sqlite` (no keys stored).
 
 ## Future directions
 
-- **Leaf-on imagery** (Jun–Aug). Most Mapillary frames here are Dec/Jan; that is why R² is poor and transfer-to-Lahore is unvalidated.
+- **Street-photo deep model for new countries.** Train a vision model on labelled streets (US now; then South Asia — Karachi, Lahore, and similar). For a city FortyGuard does not cover, drop a street photo and get predicted ΔT / planting priority from the image — no heatmap account required.
+- **Leaf-on imagery** (Jun–Aug). Most Mapillary frames here are Dec/Jan; that is why R² is poor and transfer is unvalidated.
 - **Per-city or hierarchical coeffs** once summer photos exist (do not overwrite the pooled file with a Chicago-only fit — Chicago has ~1 summer photo).
 - **True hourly forecast** if FortyGuard exposes it; until then one lagged snapshot only.
 - **More than trees:** cool pavement / shade as extra actions (today only canopy is ranked).
-- **Holdout + transfer eval** (Miami, then Karachi/Lahore) with local labels — do not ship predicted °C there first.
-- Wire `POST /predict` to an ONNX image model only after the linear baseline is honest on summer data.
+- **Holdout eval** (Miami, then Karachi/Lahore) with local labels before shipping predicted °C there.
 
 ---
 
