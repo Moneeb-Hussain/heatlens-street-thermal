@@ -3,17 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getCities, getValidate } from "@/lib/api";
-import type { City, ValidatePair } from "@/lib/types";
-
-const CITY_ORDER = ["atlanta", "chicago", "phoenix", "houston", "miami", "karachi", "lahore"];
-
-function sortCities(cities: City[]): City[] {
-  return [...cities].sort((a, b) => {
-    const ia = CITY_ORDER.indexOf(a.id);
-    const ib = CITY_ORDER.indexOf(b.id);
-    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-  });
-}
+import { sortCities } from "@/lib/cities";
+import type { ValidatePair } from "@/lib/types";
 
 function mae(pairs: ValidatePair[]): number | null {
   const scored = pairs.filter((row) => row.predicted_delta_t != null);
@@ -64,41 +55,35 @@ export default function ValidatePage() {
   const predictedN = pairs.filter((row) => row.predicted_delta_t != null).length;
 
   return (
-    <div className="shell validate-shell">
-      <aside className="panel">
-        <div className="brand">
-          <p>HeatLens</p>
-          <h1>Check predictions</h1>
-          <nav className="nav">
-            <Link href="/">Map</Link>
-            <Link href={`/validate?city=${encodeURIComponent(cityId)}`}>Check</Link>
-          </nav>
-        </div>
-        <label>
-          <span className="empty">City</span>
+    <div className="app">
+      <header className="topbar">
+        <span className="logo">
+          Heat<span className="logo-lens">Lens</span>
+        </span>
+        <label className="city-pill">
           <select value={cityId} onChange={(event) => setCityId(event.target.value)}>
             {sortCities(cities).map((item) => (
               <option key={item.id} value={item.id}>
-                {item.name} · {item.role}
+                {item.name}
               </option>
             ))}
           </select>
         </label>
-        <p className="empty">
-          Linear ΔT from street fractions vs FortyGuard street ΔT. No invented temperatures.
-        </p>
-        {error && <div className="error">{error}</div>}
-        <div className="stat-row">
-          <div className="stat">
-            <b>{pairs.length}</b>
-            <span>streets</span>
-          </div>
-          <div className="stat">
-            <b>{errorMae == null ? "—" : `${errorMae.toFixed(2)}°`}</b>
-            <span>MAE</span>
+        <div className="top-links">
+          <Link href="/">Map</Link>
+          <div className="live-pill">
+            {pairs.length} streets · MAE {errorMae == null ? "—" : `${errorMae.toFixed(2)}°`}
           </div>
         </div>
-        <p className="empty">
+      </header>
+      {error && <p className="error">{error}</p>}
+      <div className="validate-shell">
+      <aside className="feat-section">
+        <h2>Predictions vs FortyGuard</h2>
+        <p className="muted">
+          Linear ΔT from street fractions vs labelled street ΔT. No invented temperatures.
+        </p>
+        <p className="muted">
           {predictedN
             ? `${predictedN} streets have a linear prediction.`
             : "coefficients.json missing — FortyGuard column only."}
@@ -110,18 +95,19 @@ export default function ValidatePage() {
           <h2>Our ΔT</h2>
           <h2>FortyGuard ΔT</h2>
         </div>
-        {!pairs.length && <p className="empty">No segments yet for this city.</p>}
+        {!pairs.length && <p className="muted">No segments yet for this city.</p>}
         <div className="validate-table">
           {pairs.slice(0, 80).map((row) => (
             <div className="validate-row" key={row.image_id}>
-              <span className="empty">{row.image_id}</span>
+              <span className="muted">{row.image_id}</span>
               <b>{row.predicted_delta_t == null ? "—" : `${row.predicted_delta_t.toFixed(2)} °C`}</b>
               <b>{row.reference_delta_t.toFixed(2)} °C</b>
             </div>
           ))}
         </div>
-        {pairs.length > 80 && <p className="empty">Showing first 80 of {pairs.length}.</p>}
+        {pairs.length > 80 && <p className="muted">Showing first 80 of {pairs.length}.</p>}
       </main>
+      </div>
     </div>
   );
 }

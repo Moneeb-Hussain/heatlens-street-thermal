@@ -140,6 +140,17 @@ def test_validate_fills_predicted_when_coefficients_exist(tmp_path, monkeypatch)
     assert abs(pair["predicted_delta_t"] - 1.0) < 1e-9
 
 
+def test_street_name_endpoint(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        "heatlens.clients.nominatim.NominatimClient.street_name",
+        lambda self, lat, lon: "W Van Buren St & S 15th Ave",
+    )
+    response = client.get("/street-name", params={"lat": 33.4484, "lon": -112.074})
+    assert response.status_code == 200
+    assert response.json()["street"] == "W Van Buren St & S 15th Ave"
+
+
 def test_recommend_ranks(tmp_path, monkeypatch):
     client = _client(
         tmp_path,
