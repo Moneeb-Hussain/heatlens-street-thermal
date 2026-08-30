@@ -72,6 +72,7 @@ export default function StreetCard({
 
   const predicted = cityTemperatureC != null ? cityTemperatureC + selected.delta_t : null;
   const cooling = indicativeCoolingC(selected.features.canopy_frac, canopyBeta, targetCanopy);
+  const coolingLabel = cooling == null ? null : `${cooling.toFixed(1)}°C`;
   const canopyPct = pct(selected.features.canopy_frac);
   const targetPct = pct(targetCanopy);
   const plant = cooling != null && cooling > 0.2;
@@ -209,10 +210,10 @@ export default function StreetCard({
               {plant ? "Plant street trees" : cooling != null ? "Lower planting priority" : "Ranking unavailable"}
             </div>
             <div className="rec-card-body">
-              {plant
-                ? `Tree cover is ${canopyPct}% (target ${targetPct}%). Indicative cooling if canopy rises toward ${targetPct}%: about ${cooling.toFixed(1)}°C. Not a causal guarantee.`
-                : cooling != null
-                  ? `Tree cover is ${canopyPct}% (target ${targetPct}%). Extra canopy here is only ~${cooling.toFixed(1)}°C.`
+              {plant && coolingLabel
+                ? `Tree cover is ${canopyPct}% (target ${targetPct}%). Indicative cooling if canopy rises toward ${targetPct}%: about ${coolingLabel}. Not a causal guarantee.`
+                : coolingLabel
+                  ? `Tree cover is ${canopyPct}% (target ${targetPct}%). Extra canopy here is only ~${coolingLabel}.`
                   : `Tree cover is ${canopyPct}%. Fitted canopy coefficient is missing, so this street is not ranked.`}
             </div>
           </div>
