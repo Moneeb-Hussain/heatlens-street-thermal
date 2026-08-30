@@ -21,10 +21,9 @@ from api.schemas import (
     cities_payload,
 )
 from heatlens import __version__
-from heatlens.clients.fortyguard import city_mean_from_stats
 from heatlens.domain.cities import require_city
 from heatlens.domain.types import UrbanFormFeatures
-from heatlens.errors import CapabilityUnavailable
+from heatlens.errors import CapabilityUnavailable, HeatLensError, UpstreamError
 from heatlens.services.fusion import fuse_segments
 from heatlens.services.recommend import rank_interventions
 
@@ -74,6 +73,21 @@ def list_cities():
     return {"cities": [row.model_dump() for row in cities_payload()]}
 
 
+@router.get("/street-name")
+def street_name(
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+):
+    client = deps.get_nominatim()
+    try:
+        name = client.street_name(lat, lon)
+    except Exception:
+        name = None
+    finally:
+        client.close()
+    return {"street": name, "source": "geocode"}
+
+
 @router.get("/segments", response_model=SegmentListOut)
 def list_segments(city: str = Query(..., min_length=1)):
     city_id = require_city(city).id
@@ -87,26 +101,39 @@ def list_segments(city: str = Query(..., min_length=1)):
 
 def _city_temperature_c(city_id, timestamp):
     settings = deps.get_settings()
-    if not settings.has_fortyguard():
+    if not settings.has_fortyguard_for(city_id):
         raise CapabilityUnavailable(
             "FORTYGUARD_NOT_CONFIGURED",
-            "Cannot read live temperature without FORTYGUARD_API_KEY.",
+            "Cannot read live temperature without FORTYGUARD_API_KEY_{0} (or FORTYGUARD_API_KEY).".format(
+                city_id.upper()
+            ),
         )
     city_obj = require_city(city_id)
     if timestamp:
         moment = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
     else:
-        moment = datetime.now(timezone.utc)
-    client = deps.get_fortyguard()
+        from ingest.fortyguard import default_heatmap_date
+
+        moment = datetime.fromisoformat(default_heatmap_date() + "T14:00:00+00:00")
+    from ingest.fortyguard import fetch_city_heatmap
+
+    client = deps.get_fortyguard(city_id)
     try:
-        result = client.heatmap(
+        _result, temperature = fetch_city_heatmap(
             city_obj,
+            client,
             start_date=moment.date().isoformat(),
             start_time=moment.strftime("%H:%M"),
             filter_type=1,
             granularity=100,
         )
-        return moment, city_mean_from_stats(result)
+        return moment, temperature
+    except HeatLensError:
+        raise
+    except Exception as exc:
+        raise UpstreamError("FortyGuard city temperature failed: {0}".format(exc)) from exc
     finally:
         client.close()
 
@@ -191,6 +218,8 @@ def recommend(
         city=city_id,
         indicative=True,
         count=len(items),
+        canopy=coefficients.canopy,
+        target_canopy_frac=target_canopy_frac if target_canopy_frac is not None else coefficients.target_canopy_frac,
         items=[
             {
                 "image_id": item.image_id,
@@ -213,10 +242,15 @@ def recommend(
 def validate_view(city: str = Query(..., min_length=1)):
     city_id = require_city(city).id
     segments = deps.get_store().list_segments(city_id)
+    model = None
+    try:
+        model = deps.try_linear()
+    except CapabilityUnavailable:
+        model = None
     pairs = [
         ValidatePairOut(
             image_id=item.image_id,
-            predicted_delta_t=None,
+            predicted_delta_t=model.predict_delta_t(item.features) if model else None,
             reference_delta_t=item.delta_t,
             validated=item.validated,
         ).model_dump()

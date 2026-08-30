@@ -13,12 +13,12 @@ type Props = {
 };
 
 function colorForDelta(delta: number): string {
-  const t = Math.max(-6, Math.min(6, delta));
-  if (t <= 0) {
-    const u = (t + 6) / 6;
-    return lerp("#3d7ea6", "#d9d0c3", u);
+  if (delta <= 0) {
+    const u = Math.min(1, Math.abs(delta) / 2.4);
+    return lerp("#EF9F27", "#639922", u);
   }
-  return lerp("#d9d0c3", "#d4531a", t / 6);
+  const u = Math.min(1, delta / 1.15);
+  return lerp("#EF9F27", "#E24B4A", u);
 }
 
 function lerp(a: string, b: string, t: number): string {
@@ -46,23 +46,10 @@ export default function MapView({ city, segments, selectedId, onSelect }: Props)
     if (!rootRef.current || mapRef.current) return;
     const map = new maplibregl.Map({
       container: rootRef.current,
-      style: {
-        version: 8,
-        sources: {
-          carto: {
-            type: "raster",
-            tiles: [
-              "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-            ],
-            tileSize: 256,
-            attribution: "© OpenStreetMap © CARTO",
-          },
-        },
-        layers: [{ id: "carto", type: "raster", source: "carto" }],
-      },
-      center: city ? [city.center_lon, city.center_lat] : [-112.074, 33.4484],
-      zoom: 13,
-      attributionControl: true,
+      style: "https://tiles.openfreemap.org/styles/positron",
+      center: city ? [city.center_lon, city.center_lat] : [-84.388, 33.749],
+      zoom: 13.2,
+      attributionControl: { compact: true },
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     mapRef.current = map;
@@ -75,7 +62,7 @@ export default function MapView({ city, segments, selectedId, onSelect }: Props)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !city) return;
-    map.flyTo({ center: [city.center_lon, city.center_lat], zoom: 13, essential: true });
+    map.flyTo({ center: [city.center_lon, city.center_lat], zoom: 13.2, essential: true });
   }, [city]);
 
   useEffect(() => {
@@ -83,13 +70,17 @@ export default function MapView({ city, segments, selectedId, onSelect }: Props)
     if (!map) return;
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current = segments.map((segment) => {
+      const on = selectedId === segment.image_id;
       const el = document.createElement("button");
       el.type = "button";
       el.setAttribute("aria-label", `Street ${segment.image_id}`);
-      el.style.width = selectedId === segment.image_id ? "16px" : "10px";
+      el.style.width = on ? "16px" : "12px";
       el.style.height = el.style.width;
       el.style.borderRadius = "50%";
-      el.style.border = "1px solid #14110e";
+      el.style.border = "2.5px solid white";
+      el.style.boxShadow = on
+        ? "0 0 0 4px rgba(255,255,255,0.5), 0 2px 8px rgba(0,0,0,0.3)"
+        : "0 1px 4px rgba(0,0,0,0.25)";
       el.style.padding = "0";
       el.style.background = colorForDelta(segment.delta_t);
       el.style.cursor = "pointer";
@@ -101,14 +92,5 @@ export default function MapView({ city, segments, selectedId, onSelect }: Props)
     });
   }, [segments, selectedId, onSelect]);
 
-  return (
-    <div className="map-wrap">
-      <div ref={rootRef} className="map-root" />
-      <div className="legend">
-        Cooler than city mean
-        <div className="legend-bar" />
-        Hotter than city mean · ΔT °C
-      </div>
-    </div>
-  );
+  return <div ref={rootRef} className="map-root" />;
 }

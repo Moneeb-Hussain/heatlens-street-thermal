@@ -107,6 +107,21 @@ def write_labels_csv(path: Path, segments: Iterable[StreetSegment]):
             writer.writerow({key: row.get(key, "") for key in writer.fieldnames})
 
 
+def write_coefficients(path: Path, coefficients: Coefficients, extra=None):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "intercept": coefficients.intercept,
+        "canopy": coefficients.canopy,
+        "asphalt": coefficients.asphalt,
+        "sky": coefficients.sky,
+        "building": coefficients.building,
+        "target_canopy_frac": coefficients.target_canopy_frac,
+    }
+    if extra:
+        payload.update(extra)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
 def load_coefficients(path: Path) -> Coefficients:
     if not path.is_file():
         raise CapabilityUnavailable(

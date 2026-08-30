@@ -49,3 +49,30 @@ def block_id(lat, lon, block_m=BLOCK_SIZE_M) -> str:
 def iter_city_grid(city: City, spacing_m=GRID_SPACING_M) -> Iterator[Tuple[float, float, str]]:
     for lat, lon in grid_centroids(city.bbox, spacing_m):
         yield lat, lon, block_id(lat, lon)
+
+
+def spread_order(points):
+    """Reorder a finite sequence of points so that ANY prefix (first 50, first
+    500, all of it) is spread across the whole area instead of clustered in
+    one corner.
+
+    iter_city_grid() walks row-by-row (south->north, west->east), so a plain
+    `--limit N` truncation only ever samples one geographic strip. We saw this
+    bite us for real on Atlanta: the first 300 grid points in raw order gave
+    1/300 kept, while an evenly-spread 300 gave 19/300 — an ~19x difference
+    from ordering alone. This uses a golden-ratio stride (additive recurrence
+    / Fibonacci sampling — a standard low-discrepancy trick) so every prefix
+    of the reordered list is a representative sample, which matters when a
+    pull is capped by --limit or handed over in batches before it finishes.
+    """
+    items = list(points)
+    n = len(items)
+    if n <= 2:
+        return items
+    stride = max(round(n * 0.6180339887498949), 1)  # golden ratio conjugate
+    while math.gcd(stride, n) != 1:
+        stride += 1
+        if stride >= n:
+            stride = 1
+            break
+    return [items[(i * stride) % n] for i in range(n)]

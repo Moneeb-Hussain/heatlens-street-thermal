@@ -9,11 +9,16 @@ from heatlens.store import JsonSegmentStore
 
 
 def _client(tmp_path, monkeypatch, coefficients=None, segments=None):
+    # Isolate from a real .env in the repo root — heatlens.config._load_dotenv()
+    # reads whatever .env is in cwd, which would silently undo delenv() below.
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HEATLENS_SEGMENTS_PATH", str(tmp_path / "segments.json"))
     monkeypatch.setenv("HEATLENS_COEFFICIENTS_PATH", str(tmp_path / "coefficients.json"))
     monkeypatch.setenv("HEATLENS_CACHE_PATH", str(tmp_path / "cache.sqlite"))
     monkeypatch.setenv("HEATLENS_ALLOWED_ORIGINS", "http://localhost:3000")
     monkeypatch.delenv("FORTYGUARD_API_KEY", raising=False)
+    monkeypatch.delenv("FORTYGUARD_API_KEY_ATLANTA", raising=False)
+    monkeypatch.delenv("FORTYGUARD_API_KEY_CHICAGO", raising=False)
     monkeypatch.delenv("MAPILLARY_ACCESS_TOKEN", raising=False)
     if coefficients is not None:
         (tmp_path / "coefficients.json").write_text(json.dumps(coefficients), encoding="utf-8")
@@ -119,6 +124,33 @@ def test_predict_features_with_coefficients(tmp_path, monkeypatch):
     assert abs(response.json()["delta_t"] - (-1.5)) < 1e-9
 
 
+def test_validate_fills_predicted_when_coefficients_exist(tmp_path, monkeypatch):
+    client = _client(
+        tmp_path,
+        monkeypatch,
+        coefficients={"intercept": 0, "canopy": -4, "asphalt": 2, "sky": 0, "building": 0},
+        segments=[_seg()],
+    )
+    response = client.get("/validate", params={"city": "phoenix"})
+    assert response.status_code == 200
+    pair = response.json()["pairs"][0]
+    assert pair["reference_delta_t"] == 4.2
+    assert pair["predicted_delta_t"] is not None
+    # 0 + (-4)*0.05 + 2*0.6 = 1.0
+    assert abs(pair["predicted_delta_t"] - 1.0) < 1e-9
+
+
+def test_street_name_endpoint(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        "heatlens.clients.nominatim.NominatimClient.street_name",
+        lambda self, lat, lon: "W Van Buren St & S 15th Ave",
+    )
+    response = client.get("/street-name", params={"lat": 33.4484, "lon": -112.074})
+    assert response.status_code == 200
+    assert response.json()["street"] == "W Van Buren St & S 15th Ave"
+
+
 def test_recommend_ranks(tmp_path, monkeypatch):
     client = _client(
         tmp_path,
@@ -128,6 +160,9 @@ def test_recommend_ranks(tmp_path, monkeypatch):
     )
     response = client.get("/recommend", params={"city": "phoenix"})
     assert response.status_code == 200
-    item = response.json()["items"][0]
+    body = response.json()
+    item = body["items"][0]
     assert item["indicative"] is True
     assert item["estimated_cooling_c"] > 0
+    assert body["canopy"] == -8
+    assert body["target_canopy_frac"] == 0.4

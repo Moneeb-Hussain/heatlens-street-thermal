@@ -1,189 +1,328 @@
 # HeatLens
 
-Street photos + FortyGuard temperature → map of which streets are hottest → rank where to plant trees first.
+Street photos + FortyGuard street ΔT → map the hottest streets → rank where extra canopy would cut ΔT most.
 
-**3-day hackathon. Two people:**
-- **AI person** — trains the vision model (`heatlens/ml/`, `models/`)
-- **You** — get the data, run the API, finish the website (`ingest/`, `api/`, `web/`)
+Demo cities: **Atlanta** and **Chicago**. Temperatures are never invented.
 
 ---
 
-## Setup (do this once)
+## What is actually built
 
-### 1. Python backend
+| Piece | What it does | What it is not |
+|---|---|---|
+| Map (`web/`) | OpenFreeMap + coloured street markers from labelled ΔT | Live hourly weather map |
+| Street panel | Name (Photon/Nominatim), ΔT, Urban Form bars, Action | 12-hour forecast bars |
+| SegFormer-B0 (frozen) | Photo → canopy / asphalt / sky / building fractions | A trained heat vision net |
+| OLS (`coefficients.json`) | `ΔT = a + b·canopy + c·asphalt + d·sky + e·building` | Per-city models; deep learning |
+| `/forecast` | One **lagged** FortyGuard citywide mean (~7 days) | Synthetic 12-hour series |
+| `/recommend` | `cooling ≈ −β_canopy × (0.40 − current canopy)` | Causal “trees will cool X°C” |
+| `/validate` | Linear ΔT vs FortyGuard labelled ΔT | Proof the model generalises |
+
+**Shipped numbers (pooled Atlanta + Chicago):** 2411 streets (1525 ATL + 886 CHI). Canopy coeff ≈ **−1.12**. Test R² is near zero / negative — map dots use **FortyGuard labels**, not the linear prediction.
+
+**Formula we serve:** `T_street(t) = FortyGuard city snapshot(t) + ΔT_street`. City snapshot needs a per-state API key. ΔT on the map comes from the label file even if the key is missing.
+
+---
+
+## Run from scratch
+
+### 0. You need
+
+- Python 3.9+ (3.12 is fine; this repo’s venv may be 3.14)
+- Node **22** (`web/.nvmrc`)
+- FortyGuard keys: one account is **locked to one US state**. Atlanta = GA, Chicago = IL.
+- Three artifacts (gitignored — not in the repo):
+  - `data/labels.csv`
+  - `data/segments.json`
+  - `data/coefficients.json`
+
+If you do not have those three files, build them (step 3) before the map will show dots.
+
+### 1. Backend
 
 ```bash
+git clone <this-repo>
+cd heatlens-street-thermal
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 cp .env.example .env
 ```
 
-Add your keys to `.env`:
+Edit `.env` (do not commit it):
+
 ```
-FORTYGUARD_API_KEY=...
-MAPILLARY_ACCESS_TOKEN=...
+FORTYGUARD_API_KEY_ATLANTA=<georgia-account-key>
+FORTYGUARD_API_KEY_CHICAGO=<illinois-account-key>
+FORTYGUARD_API_KEY=<optional shared fallback>
+FORTYGUARD_BASE_URL=https://api.fortyguard.com
+MAPILLARY_ACCESS_TOKEN=<only needed to pull new photos>
+HEATLENS_SEGMENTS_PATH=data/segments.json
+HEATLENS_LABELS_PATH=data/labels.csv
+HEATLENS_COEFFICIENTS_PATH=data/coefficients.json
+HEATLENS_CACHE_PATH=data/cache/heatlens.sqlite
+HEATLENS_ALLOWED_ORIGINS=http://localhost:3000
 ```
 
-Start the API:
 ```bash
 uvicorn api.main:app --reload --port 8000
 ```
-→ http://localhost:8000/docs
+
+Open http://localhost:8000/docs and http://localhost:8000/health  
+`capabilities.fortyguard` should be `true` if a key is set.
 
 ### 2. Website
 
 ```bash
 cd web
-nvm use          # needs Node 22 — see web/.nvmrc
+nvm use          # Node 22
 npm install
 npm run dev
 ```
-→ http://localhost:3000
 
-### 3. Quick check
+http://localhost:3000 — city pill is **Atlanta, GA** and **Chicago, IL** only.
+
+### Deploy the website (Vercel)
+
+Config file: `web/vercel.json`. FastAPI does **not** run on Vercel — only the Next app. The API stays on Render/Railway/a VM.
+
+1. Push the repo to GitHub.
+2. [vercel.com/new](https://vercel.com/new) → Import the repo.
+3. **Root Directory:** `web` (Edit → select `web`). Framework: Next.js.
+4. Environment variable:
+
+   | Name | Value |
+   |---|---|
+   | `NEXT_PUBLIC_API_URL` | public URL of the running API, no trailing slash (e.g. `https://heatlens-api.onrender.com`) |
+
+5. Deploy.
+
+CLI from this repo:
 
 ```bash
-pytest                                    # should pass
-python -m heatlens.ingest.build --json    # grid counts per city
+cd web
+npx vercel
 ```
+
+On the API host, add the Vercel origin to `HEATLENS_ALLOWED_ORIGINS` (comma-separated), e.g. `http://localhost:3000,https://your-app.vercel.app`, then restart uvicorn.
+
+### 3. Data (if `data/` is empty)
+
+Photos and CSVs are gitignored (`delivery_*`, `data/labels.csv`, `data/segments.json`, `data/coefficients.json`).
+
+**Already have the three files:** put them in `data/` and restart the API.
+
+**Rebuild from teammate dumps + Colab (what we did):**
+
+1. Unzip Atlanta + Chicago deliveries (labels CSV + `{image_id}.jpg`).
+2. Upload to Drive `MyDrive/heatlens/`:
+   - `labels_atlanta.csv` (Atlanta rows with fractions already filled), or last run’s `labels.csv`
+   - `delivery_chicago_full.zip`
+3. Colab: `notebooks/heatlens_pooled_colab.ipynb` → Runtime **T4 GPU** → Run all.  
+   Frozen SegFormer fills Chicago fractions; OLS fits **one** pooled model.
+4. Copy downloads into `data/`:
+
+```bash
+cp labels.csv data/labels.csv
+cp coefficients.json data/coefficients.json
+cp segments.json data/segments.json
+```
+
+**Local merge + fit** (after both CSVs have fractions; no GPU):
+
+```bash
+python -m heatlens.ml.pool \
+  --labels data/labels.csv \
+  --labels path/to/chicago_filled.csv \
+  --fit-linear --write-segments
+```
+
+Do **not** fit Chicago-only and overwrite Atlanta coefficients. One `coefficients.json`.
+
+### 4. Check
+
+```bash
+source .venv/bin/activate
+pytest
+curl -s http://localhost:8000/health
+curl -s 'http://localhost:8000/segments?city=atlanta' | python3 -c "import sys,json; print(json.load(sys.stdin)['count'])"
+curl -s 'http://localhost:8000/segments?city=chicago' | python3 -c "import sys,json; print(json.load(sys.stdin)['count'])"
+```
+
+Expect Atlanta **1525**, Chicago **886** if the pooled files are in place.
 
 ---
 
-## What's already built (skeleton)
-
-| Part | Status | What it does |
-|---|---|---|
-| **API** (`api/`) | ✅ Running | `/health`, `/cities`, `/segments`, `/forecast`, `/recommend`, etc. |
-| **Website** (`web/`) | ✅ Running | Map + city picker + side panel. Empty until data exists. |
-| **FortyGuard client** | ✅ Ready | Submit heatmap → poll → get temperature. Caches responses. |
-| **Mapillary client** | ✅ Ready | Find best photo within 50m of a point. |
-| **Grid sampler** | ✅ Ready | 50m points across each city + 1km block IDs. |
-| **Photo filters** | ✅ Ready | Rejects panos, fisheye, night shots, low quality. |
-| **ML metrics / splits** | ✅ Ready | MAE, R², spatial-block leak checks. |
-| **Agent tools** | ✅ Ready | `list_cities`, `list_segments`, `rank_interventions`. |
-| **Tests** | ✅ 23 passing | Domain, API, clients. |
-
-**Important:** nothing shows fake heat. Map stays empty until you add real data files.
-
----
-
-## What YOU still need to build
-
-| Priority | Task | File(s) | Why |
-|---|---|---|---|
-| 🔴 Day 1 | Put API keys in `.env` | `.env` | Nothing works without keys |
-| 🔴 Day 1 | Check photo coverage per city | run `ingest.build --json` | Swap city if no photos |
-| 🔴 Day 1–2 | Download street photos | `data/raw/` | Training needs images |
-| 🔴 Day 1–2 | Build labelled dataset | `data/labels.csv` | AI person trains on this |
-| 🔴 Day 2 | Map data file | `data/segments.json` | Map shows dots |
-| 🟡 Day 2–3 | Wire live forecast + time slider | `api/routes.py`, `web/` | FortyGuard 12h forecast |
-| 🟡 Day 3 | Validation view | `web/` | Our predictions vs FortyGuard heatmap |
-| 🟡 Day 3 | Deploy + demo video | Vercel + Render | Submission |
-
-### Files you own — don't touch AI person's code
-
-```
-ingest/imagery.py      ← finish: bulk photo download from Mapillary
-ingest/fortyguard.py   ← finish: pull delta_t labels from FortyGuard heatmaps
-ingest/build.py        ← finish: grid → photo → label → labels.csv (one command)
-api/                   ← keep thin, add export CSV if time
-web/                   ← map polish, time slider, validation page
-data/                  ← all runtime files live here (not committed to git)
-agent/tools.py         ← MCP agent wrapper
-```
-
-### Files AI person owns — don't touch these
-
-```
-heatlens/ml/           ← training, evaluation, segmentation
-models/train.py        ← fine-tune vision model
-models/segment.py      ← SegFormer feature extraction
-models/evaluate.py     ← score predictions
-```
-
----
-
-## Your 3-day plan
-
-| Day | Do | Deliver to AI person |
-|---|---|---|
-| **1** | Keys in `.env`. Run grid counts. Start downloading photos. Try Mapillary + FortyGuard on Phoenix first. | Message: "X photos in Phoenix, keys work" |
-| **2** | Finish `labels.csv` + `data/raw/`. Write `segments.json`. Map shows real dots. | `labels.csv` + images (this unblocks training) |
-| **3** | Forecast slider, validation view, deploy, demo video | Working demo URL |
-
----
-
-## Data files explained
-
-### `data/labels.csv` — training dataset (AI person needs this)
-
-| Column | Example | Source |
-|---|---|---|
-| `image_id` | `mapillary_abc123` | Mapillary |
-| `lat`, `lon` | `33.45, -112.07` | Photo GPS |
-| `city` | `phoenix` | You assign |
-| `block_id` | `b_14_22` | Auto from grid |
-| `delta_t` | `-3.1` or `+5.2` | FortyGuard (°C vs city mean) |
-| `canopy_frac` | `0.42` | SegFormer (AI person fills later) |
-| `asphalt_frac` | `0.31` | SegFormer |
-| `sky_frac` | `0.18` | SegFormer |
-| `building_frac` | `0.09` | SegFormer |
-| `split` | `train` / `test` / `holdout_city` | 1km blocks, Miami = holdout |
-
-### `data/segments.json` — what the map reads
-
-Same info as labels but in JSON. One entry per street point with `lat`, `lon`, `delta_t`, feature fractions.
-
-### `data/coefficients.json` — ranking (AI person gives you this)
-
-Fitted numbers for "how much cooling per unit of extra tree cover." Powers `/recommend`.
-
----
-
-## API endpoints
+## API
 
 | Endpoint | Needs | Returns |
 |---|---|---|
-| `GET /health` | nothing | what's configured |
-| `GET /cities` | nothing | Phoenix, Atlanta, Houston, Miami, Karachi, Lahore |
-| `GET /segments?city=phoenix` | `segments.json` | street points (empty list if no file) |
-| `GET /forecast?city=phoenix` | FortyGuard key | city temperature snapshot |
-| `GET /absolute?city=phoenix` | FortyGuard key + segments | street temp = forecast + delta_t |
-| `GET /recommend?city=phoenix` | coefficients.json + segments | ranked tree-planting list |
-| `POST /predict` | trained model | delta_t from uploaded photo |
-
-Full docs: http://localhost:8000/docs
+| `GET /health` | — | capabilities (keys, files, model name) |
+| `GET /cities` | — | study list (UI shows Atlanta + Chicago) |
+| `GET /segments?city=atlanta` | `segments.json` | street points + fractions + ΔT |
+| `GET /forecast?city=atlanta` | per-city FortyGuard key | one lagged city °C |
+| `GET /absolute?city=atlanta` | key + segments | `city °C + ΔT` per street |
+| `GET /recommend?city=atlanta` | coefficients + segments | ranked canopy actions + `canopy` coeff |
+| `GET /validate?city=atlanta` | both | predicted vs labelled ΔT |
+| `GET /street-name?lat=&lon=` | network | OSM road name (Photon, then Nominatim) |
+| `POST /predict/features` | coefficients | ΔT from four fractions |
+| `POST /predict` | ONNX vision model | **not wired** (`model: false`) |
 
 ---
 
-## Study cities
+## FortyGuard: one real request / response
 
-| City | Role | Notes |
+FortyGuard: `POST /v1/heatmap` → poll `GET /v1/status/{activity_id}`.  
+Header: `api-key` (not shown). One account = one US state.
+
+Query date must be **lagged**. `today` returns `n_cells: 0`. We use ~**7 days back**, 14:00, 100 m tiles.
+
+### Request (`POST https://api.fortyguard.com/v1/heatmap`)
+
+Atlanta downtown bbox, 2026-08-23 14:00 (logged from this repo):
+
+```json
+{
+  "polygon_aoi": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": { "city": "atlanta" },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [[
+            [-84.405286, 33.734627],
+            [-84.370714, 33.734627],
+            [-84.370714, 33.763373],
+            [-84.405286, 33.763373],
+            [-84.405286, 33.734627]
+          ]]
+        }
+      }
+    ]
+  },
+  "date_time": {
+    "start_date": "2026-08-23",
+    "start_time": "14:00",
+    "filter_type": 1
+  },
+  "granularity": 100
+}
+```
+
+### Submit response
+
+```json
+{
+  "error": false,
+  "data": {
+    "activity_id": "1399da5e-da2b-4597-a672-6796daf018d9"
+  }
+}
+```
+
+### Completed job (truncated)
+
+Real cached result from that Atlanta query: **960** tiles. City mean **34.37°C**. One tile shown; the rest omitted.
+
+```json
+{
+  "map_data": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "id": "0",
+        "type": "Feature",
+        "properties": {
+          "tile_id": 0,
+          "average_temperature": 34.3079,
+          "min_temperature": 34.3079,
+          "max_temperature": 34.3079
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [[
+            [-84.404008, 33.735854],
+            [-84.402938, 33.735831],
+            [-84.402911, 33.736722],
+            [-84.403981, 33.736745],
+            [-84.404008, 33.735854]
+          ]]
+        }
+      }
+    ]
+  },
+  "stats_data": {
+    "temperature_stats": {
+      "minimum": 34.2827,
+      "maximum": 34.482,
+      "mean": 34.3655315625,
+      "standard_deviation": 0.04974415558920302
+    }
+  }
+}
+```
+
+`HeatLens /forecast` then returns:
+
+```json
+{
+  "city": "atlanta",
+  "source": "fortyguard",
+  "points": [
+    { "timestamp": "2026-08-23T14:00:00Z", "temperature_c": 34.3655315625 }
+  ]
+}
+```
+
+Street predicted temp (when the snapshot is up) = `34.37 + street ΔT`.  
+Responses are cached in `data/cache/heatlens.sqlite` (no keys stored).
+
+---
+
+## Study cities (code vs demo)
+
+| City | Role in code | Demo UI |
 |---|---|---|
-| Phoenix | train | Low trees, very hot |
-| Atlanta | train | High trees — model sees both extremes |
-| Houston | train | Mixed |
-| Miami | holdout | Never used in training — tests generalisation |
-| Karachi / Lahore | transfer only | No FortyGuard — mark **unvalidated** on map |
+| Atlanta | train | yes |
+| Chicago | train | yes |
+| Phoenix, Houston | train (legacy) | hidden |
+| Miami | holdout | hidden |
+| Karachi, Lahore | transfer | hidden — **no FortyGuard**, do not claim °C |
 
 ---
 
-## Rules
+## Rules we actually follow
 
-- **Never invent temperatures.** Empty map > fake data.
-- **Cache every FortyGuard call.** Credit ledger in `data/cache/`.
-- **Karachi/Lahore** labelled unvalidated in the UI.
-- **Recommendations** labelled indicative (not guaranteed cooling).
-- **Stuck?** Message the AI person. Don't guess.
+- Never invent temperatures or hourly bars.
+- Cache FortyGuard; ledger in `data/cache/`.
+- Recommendations are **indicative** (0.4°C on a 0% canopy street is the linear signal, not a field trial).
+- Winter / December photos vs summer FortyGuard labels — the OLS does not transfer street-by-street. Be honest in the demo.
 
 ---
 
-## Handoffs between you two
+## Future directions
 
-| When | From → To | File |
-|---|---|---|
-| End Day 2 | You → AI | `labels.csv` + `data/raw/` |
-| End Day 3 | AI → You | `data/segments.json` (with model predictions) |
-| Day 3 | AI → You | `data/coefficients.json` (for ranked list) |
-| Day 3 | You → AI | FortyGuard heatmap screenshot (for validation figure) |
+- **Leaf-on imagery** (Jun–Aug). Most Mapillary frames here are Dec/Jan; that is why R² is poor and transfer-to-Lahore is unvalidated.
+- **Per-city or hierarchical coeffs** once summer photos exist (do not overwrite the pooled file with a Chicago-only fit — Chicago has ~1 summer photo).
+- **True hourly forecast** if FortyGuard exposes it; until then one lagged snapshot only.
+- **More than trees:** cool pavement / shade as extra actions (today only canopy is ranked).
+- **Holdout + transfer eval** (Miami, then Karachi/Lahore) with local labels — do not ship predicted °C there first.
+- Wire `POST /predict` to an ONNX image model only after the linear baseline is honest on summer data.
+
+---
+
+## Repo map
+
+```
+api/                   FastAPI
+web/                   Next.js map UI
+heatlens/clients/      FortyGuard, Mapillary, Photon/Nominatim, SQLite cache
+heatlens/ml/           SegFormer fractions, OLS, pooled merge
+heatlens/ingest/       grid + dataset build
+ingest/fortyguard.py   heatmap → tile ΔT (date lag)
+notebooks/             Colab: Atlanta-only and pooled Atlanta+Chicago
+data/                  runtime artifacts (gitignored)
+tests/
+```

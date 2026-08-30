@@ -1,5 +1,6 @@
 .env
 .venv/
+.venv-ml/
 venv/
 __pycache__/
 *.py[cod]
@@ -17,6 +18,11 @@ web/out/
 data/raw/
 data/cache/
 data/labels.csv
+
+# Teammate photo dumps — large jpgs, not for git
+delivery_atlanta_full_READY/
+delivery_chicago_full/
+delivery_*first50/
 data/segments.json
 data/coefficients.json
 data/models/

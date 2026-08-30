@@ -23,7 +23,8 @@ def load_onnx_regressor(settings: Settings):
     except ImportError as exc:
         raise CapabilityUnavailable(
             "MODEL_NOT_AVAILABLE",
-            "ONNX file present but onnxruntime is not installed. pip install -e '.[ml]'",
+            "ONNX file present but onnxruntime is not installed. "
+            "It has no Python 3.14 wheel — skip ONNX on this venv, or use 3.11/3.12.",
         ) from exc
     session = ort.InferenceSession(str(settings.model_path), providers=["CPUExecutionProvider"])
     return OnnxRegressor(session)

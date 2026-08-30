@@ -21,12 +21,31 @@ class Settings(object):
             env.get("FORTYGUARD_BASE_URL") or "https://api.fortyguard.com"
         ).rstrip("/")
         self.mapillary_access_token = (env.get("MAPILLARY_ACCESS_TOKEN") or "").strip() or None
+        self._env = env  # kept for per-city FortyGuard key lookups below
 
     def origins(self) -> List[str]:
         return [part.strip() for part in self.allowed_origins.split(",") if part.strip()]
 
     def has_fortyguard(self) -> bool:
-        return self.fortyguard_api_key is not None
+        if self.fortyguard_api_key is not None:
+            return True
+        from heatlens.domain.cities import CITIES
+
+        return any(self.has_fortyguard_for(city.id) for city in CITIES)
+
+    def fortyguard_api_key_for(self, city_id):
+        """FortyGuard locks one account to one US state, chosen at signup and
+        not changeable (confirmed by their support 2026-08-27). Atlanta/GA,
+        Chicago/IL, Miami/FL each need their OWN account+key. Set
+        FORTYGUARD_API_KEY_<CITY_ID> (e.g. FORTYGUARD_API_KEY_ATLANTA) in .env
+        for each city; falls back to the shared FORTYGUARD_API_KEY if no
+        per-city key is set (fine for single-state setups).
+        """
+        specific = (self._env.get("FORTYGUARD_API_KEY_{0}".format(city_id.upper())) or "").strip()
+        return specific or self.fortyguard_api_key
+
+    def has_fortyguard_for(self, city_id) -> bool:
+        return self.fortyguard_api_key_for(city_id) is not None
 
     def has_mapillary(self) -> bool:
         return self.mapillary_access_token is not None

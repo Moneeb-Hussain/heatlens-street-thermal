@@ -11,7 +11,7 @@ from heatlens.domain.cities import City
 REJECT_CAMERA_TYPES = frozenset({"fisheye", "equirectangular", "spherical"})
 DAYLIGHT_START_HOUR = 10
 DAYLIGHT_END_HOUR = 16
-MAX_AGE_DAYS = 365 * 3
+MAX_AGE_DAYS = 365 * 7  # bumped 5->7yr per Moneeb 2026-08-26: Atlanta raw data showed a Dec-2019 bulk capture wave that a 5yr cutoff still missed; 7yr recovered 6.3%->40.7% kept
 MIN_QUALITY = 0.40
 
 
