@@ -218,6 +218,8 @@ def recommend(
         city=city_id,
         indicative=True,
         count=len(items),
+        canopy=coefficients.canopy,
+        target_canopy_frac=target_canopy_frac if target_canopy_frac is not None else coefficients.target_canopy_frac,
         items=[
             {
                 "image_id": item.image_id,

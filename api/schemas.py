@@ -101,6 +101,8 @@ class RecommendOut(BaseModel):
     indicative: bool = True
     count: int
     items: list
+    canopy: Optional[float] = None
+    target_canopy_frac: float = 0.4
 
 
 class ValidatePairOut(BaseModel):

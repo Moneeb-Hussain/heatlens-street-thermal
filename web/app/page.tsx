@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { getCities, getForecast, getHealth, getRecommendations, getSegments, getStreetName } from "@/lib/api";
 import { sortCities } from "@/lib/cities";
-import type { Capabilities, City, RecommendItem, Segment } from "@/lib/types";
+import type { Capabilities, City, Segment } from "@/lib/types";
 import StreetCard from "@/components/StreetCard";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
@@ -33,7 +33,8 @@ export default function HomePage() {
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [recommendations, setRecommendations] = useState<RecommendItem[]>([]);
+  const [canopyBeta, setCanopyBeta] = useState<number | null>(null);
+  const [targetCanopy, setTargetCanopy] = useState(0.4);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [cityTemperatureC, setCityTemperatureC] = useState<number | null>(null);
   const [forecastLoading, setForecastLoading] = useState(false);
@@ -74,11 +75,13 @@ export default function HomePage() {
         }
       });
     getRecommendations(cityId)
-      .then((rows) => {
-        if (!cancelled) setRecommendations(rows);
+      .then((body) => {
+        if (cancelled) return;
+        setCanopyBeta(body.canopy);
+        setTargetCanopy(body.target_canopy_frac ?? 0.4);
       })
       .catch(() => {
-        if (!cancelled) setRecommendations([]);
+        if (!cancelled) setCanopyBeta(null);
       });
     return () => {
       cancelled = true;
@@ -141,7 +144,6 @@ export default function HomePage() {
 
   const city = cities.find((row) => row.id === cityId) ?? null;
   const onSelect = useCallback((id: string) => setSelectedId(id), []);
-  const selectedRec = recommendations.find((row) => row.image_id === selectedId) ?? null;
   const cityLabel = CITY_SUFFIX[cityId] ?? city?.name ?? cityId;
 
   return (
@@ -205,7 +207,8 @@ export default function HomePage() {
         <aside className="detail">
           <StreetCard
             selected={selected}
-            recommendation={selectedRec}
+            canopyBeta={canopyBeta}
+            targetCanopy={targetCanopy}
             cityTemperatureC={cityTemperatureC}
             cityLabel={cityLabel}
             streetName={streetName}

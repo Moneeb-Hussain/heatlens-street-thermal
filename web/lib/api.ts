@@ -3,7 +3,7 @@ import type {
   City,
   Forecast,
   Health,
-  RecommendItem,
+  RecommendResponse,
   Segment,
   ValidateView,
 } from "./types";
@@ -39,11 +39,10 @@ export async function getSegments(city: string): Promise<Segment[]> {
   return body.segments;
 }
 
-export async function getRecommendations(city: string): Promise<RecommendItem[]> {
-  const body = await request<{ items: RecommendItem[] }>(
+export async function getRecommendations(city: string): Promise<RecommendResponse> {
+  return request<RecommendResponse>(
     `/recommend?city=${encodeURIComponent(city)}&limit=80`
   );
-  return body.items;
 }
 
 export async function getForecast(city: string, timestamp?: string): Promise<Forecast> {

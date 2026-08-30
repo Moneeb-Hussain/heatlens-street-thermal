@@ -160,6 +160,9 @@ def test_recommend_ranks(tmp_path, monkeypatch):
     )
     response = client.get("/recommend", params={"city": "phoenix"})
     assert response.status_code == 200
-    item = response.json()["items"][0]
+    body = response.json()
+    item = body["items"][0]
     assert item["indicative"] is True
     assert item["estimated_cooling_c"] > 0
+    assert body["canopy"] == -8
+    assert body["target_canopy_frac"] == 0.4

@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import type { RecommendItem, Segment } from "@/lib/types";
+import type { Segment } from "@/lib/types";
 
 type Tab = "temp" | "feat" | "rec";
 
 type Props = {
   selected: Segment | null;
-  recommendation: RecommendItem | null;
+  canopyBeta: number | null;
+  targetCanopy: number;
   cityTemperatureC: number | null;
   cityLabel: string;
   streetName: string | null;
@@ -33,9 +34,15 @@ function deltaColor(delta: number): string {
   return "#EF9F27";
 }
 
+function indicativeCoolingC(canopyFrac: number, beta: number | null, target: number): number | null {
+  if (beta == null || beta >= 0) return null;
+  return -beta * Math.max(target - canopyFrac, 0);
+}
+
 export default function StreetCard({
   selected,
-  recommendation,
+  canopyBeta,
+  targetCanopy,
   cityTemperatureC,
   cityLabel,
   streetName,
@@ -64,7 +71,10 @@ export default function StreetCard({
   }
 
   const predicted = cityTemperatureC != null ? cityTemperatureC + selected.delta_t : null;
-  const cooling = recommendation?.estimated_cooling_c;
+  const cooling = indicativeCoolingC(selected.features.canopy_frac, canopyBeta, targetCanopy);
+  const canopyPct = pct(selected.features.canopy_frac);
+  const targetPct = pct(targetCanopy);
+  const plant = cooling != null && cooling > 0.2;
   const fallbackId = selected.block_id && !selected.block_id.startsWith("b_")
     ? selected.block_id
     : null;
@@ -190,18 +200,20 @@ export default function StreetCard({
           <div
             className="rec-card"
             style={
-              cooling && cooling > 0.2
+              plant
                 ? { background: "var(--bg-danger)", color: "var(--text-danger)" }
                 : { background: "var(--bg-success)", color: "var(--text-success)" }
             }
           >
             <div className="rec-card-title">
-              {cooling && cooling > 0.2 ? "Plant street trees" : "Lower planting priority"}
+              {plant ? "Plant street trees" : cooling != null ? "Lower planting priority" : "Ranking unavailable"}
             </div>
             <div className="rec-card-body">
-              {cooling && cooling > 0.2
-                ? `Indicative cooling if canopy rises toward 40%: about ${cooling.toFixed(1)}°C. Not a causal guarantee.`
-                : "Canopy is already closer to the 40% target, or ranking is unavailable."}
+              {plant
+                ? `Tree cover is ${canopyPct}% (target ${targetPct}%). Indicative cooling if canopy rises toward ${targetPct}%: about ${cooling.toFixed(1)}°C. Not a causal guarantee.`
+                : cooling != null
+                  ? `Tree cover is ${canopyPct}% (target ${targetPct}%). Extra canopy here is only ~${cooling.toFixed(1)}°C.`
+                  : `Tree cover is ${canopyPct}%. Fitted canopy coefficient is missing, so this street is not ranked.`}
             </div>
           </div>
         </div>

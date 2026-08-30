@@ -65,6 +65,12 @@ export type RecommendItem = {
   validated: boolean;
 };
 
+export type RecommendResponse = {
+  items: RecommendItem[];
+  canopy: number | null;
+  target_canopy_frac: number;
+};
+
 export type ForecastPoint = {
   timestamp: string;
   temperature_c: number;
