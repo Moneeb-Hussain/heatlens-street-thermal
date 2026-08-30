@@ -46,18 +46,8 @@ export default function MapView({ city, segments, selectedId, onSelect }: Props)
     if (!rootRef.current || mapRef.current) return;
     const map = new maplibregl.Map({
       container: rootRef.current,
-      style: {
-        version: 8,
-        sources: {
-          osm: {
-            type: "raster",
-            tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-            tileSize: 256,
-            attribution: "© OpenStreetMap contributors",
-          },
-        },
-        layers: [{ id: "osm", type: "raster", source: "osm" }],
-      },
+      // OpenFreeMap (OSM data). tile.openstreetmap.org blocks MapLibre fetch (AJAXError).
+      style: "https://tiles.openfreemap.org/styles/dark",
       center: city ? [city.center_lon, city.center_lat] : [-112.074, 33.4484],
       zoom: 13,
       attributionControl: true,
