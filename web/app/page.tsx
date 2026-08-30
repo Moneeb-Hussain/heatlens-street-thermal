@@ -36,6 +36,7 @@ export default function HomePage() {
   const [recommendations, setRecommendations] = useState<RecommendItem[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [cityTemperatureC, setCityTemperatureC] = useState<number | null>(null);
+  const [forecastLoading, setForecastLoading] = useState(false);
   const [streetName, setStreetName] = useState<string | null>(null);
   const [streetNameLoading, setStreetNameLoading] = useState(false);
 
@@ -87,9 +88,11 @@ export default function HomePage() {
   useEffect(() => {
     if (!capabilities?.fortyguard) {
       setCityTemperatureC(null);
+      setForecastLoading(false);
       return;
     }
     let cancelled = false;
+    setForecastLoading(true);
     const handle = window.setTimeout(() => {
       getForecast(cityId, lagTimestamp(14))
         .then((body) => {
@@ -97,6 +100,9 @@ export default function HomePage() {
         })
         .catch(() => {
           if (!cancelled) setCityTemperatureC(null);
+        })
+        .finally(() => {
+          if (!cancelled) setForecastLoading(false);
         });
     }, 350);
     return () => {
@@ -179,7 +185,7 @@ export default function HomePage() {
                 : "Street − city mean · FortyGuard labels"}
             </div>
           </div>
-          {!selectedId && <div className="hint">Tap any dot to explore a street</div>}
+          {!selectedId && <div className="hint">Tap a street marker to inspect it</div>}
           <div className="legend">
             <div className="legend-title">Street risk</div>
             <div className="leg-row">
@@ -204,6 +210,8 @@ export default function HomePage() {
             cityLabel={cityLabel}
             streetName={streetName}
             streetNameLoading={streetNameLoading}
+            fortyguardConfigured={Boolean(capabilities?.fortyguard)}
+            forecastLoading={forecastLoading}
             onClose={() => setSelectedId(null)}
           />
         </aside>

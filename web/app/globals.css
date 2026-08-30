@@ -287,10 +287,37 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 12px;
+  padding: 36px 32px;
+  text-align: center;
+}
+
+.empty-marks {
+  display: flex;
   gap: 8px;
-  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.empty-mark {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}
+
+.empty-title {
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.3px;
+  color: var(--text-primary);
+}
+
+.empty-copy {
+  max-width: 280px;
   font-size: 13px;
-  padding: 24px;
+  line-height: 1.45;
+  color: var(--text-secondary);
 }
 
 .street-content {

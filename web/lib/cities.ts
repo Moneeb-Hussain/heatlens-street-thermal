@@ -1,19 +1,10 @@
 import type { City } from "./types";
 
-export const CITY_ORDER = [
-  "atlanta",
-  "chicago",
-  "phoenix",
-  "houston",
-  "miami",
-  "karachi",
-  "lahore",
-];
+export const DEMO_CITY_IDS = ["atlanta", "chicago"] as const;
 
 export function sortCities(cities: City[]): City[] {
-  return [...cities].sort((a, b) => {
-    const ia = CITY_ORDER.indexOf(a.id);
-    const ib = CITY_ORDER.indexOf(b.id);
-    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-  });
+  const rank = new Map(DEMO_CITY_IDS.map((id, index) => [id, index]));
+  return cities
+    .filter((city) => rank.has(city.id))
+    .sort((a, b) => (rank.get(a.id) ?? 99) - (rank.get(b.id) ?? 99));
 }

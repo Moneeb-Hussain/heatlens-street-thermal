@@ -21,10 +21,9 @@ from api.schemas import (
     cities_payload,
 )
 from heatlens import __version__
-from heatlens.clients.fortyguard import city_mean_from_stats
 from heatlens.domain.cities import require_city
 from heatlens.domain.types import UrbanFormFeatures
-from heatlens.errors import CapabilityUnavailable
+from heatlens.errors import CapabilityUnavailable, HeatLensError, UpstreamError
 from heatlens.services.fusion import fuse_segments
 from heatlens.services.recommend import rank_interventions
 
@@ -118,16 +117,23 @@ def _city_temperature_c(city_id, timestamp):
         from ingest.fortyguard import default_heatmap_date
 
         moment = datetime.fromisoformat(default_heatmap_date() + "T14:00:00+00:00")
+    from ingest.fortyguard import fetch_city_heatmap
+
     client = deps.get_fortyguard(city_id)
     try:
-        result = client.heatmap(
+        _result, temperature = fetch_city_heatmap(
             city_obj,
+            client,
             start_date=moment.date().isoformat(),
             start_time=moment.strftime("%H:%M"),
             filter_type=1,
             granularity=100,
         )
-        return moment, city_mean_from_stats(result)
+        return moment, temperature
+    except HeatLensError:
+        raise
+    except Exception as exc:
+        raise UpstreamError("FortyGuard city temperature failed: {0}".format(exc)) from exc
     finally:
         client.close()
 

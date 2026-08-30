@@ -12,6 +12,8 @@ type Props = {
   cityLabel: string;
   streetName: string | null;
   streetNameLoading: boolean;
+  fortyguardConfigured: boolean;
+  forecastLoading: boolean;
   onClose: () => void;
 };
 
@@ -38,6 +40,8 @@ export default function StreetCard({
   cityLabel,
   streetName,
   streetNameLoading,
+  fortyguardConfigured,
+  forecastLoading,
   onClose,
 }: Props) {
   const [tab, setTab] = useState<Tab>("temp");
@@ -45,7 +49,16 @@ export default function StreetCard({
   if (!selected) {
     return (
       <div className="empty-state">
-        <span>Select a street on the map</span>
+        <div className="empty-marks" aria-hidden>
+          <span className="empty-mark" style={{ background: "#E24B4A" }} />
+          <span className="empty-mark" style={{ background: "#EF9F27" }} />
+          <span className="empty-mark" style={{ background: "#639922" }} />
+        </div>
+        <div className="empty-title">Select a street to inspect heat</div>
+        <p className="empty-copy">
+          See how hot it runs versus the city, what the street is made of, and where extra
+          canopy would cool it most.
+        </p>
       </div>
     );
   }
@@ -104,7 +117,13 @@ export default function StreetCard({
                 {predicted == null ? "—" : `${predicted.toFixed(1)}°C`}
               </div>
               <div className="tcard-sub">
-                {predicted == null ? "Needs FortyGuard city °C + ΔT" : "City forecast + street ΔT"}
+                {predicted == null
+                  ? forecastLoading
+                    ? "Loading FortyGuard city °C"
+                    : fortyguardConfigured
+                      ? "City °C unavailable — ΔT still real"
+                      : "Needs FortyGuard city °C + ΔT"
+                  : "City snapshot + street ΔT"}
               </div>
             </div>
             <div className="tcard">
@@ -123,14 +142,25 @@ export default function StreetCard({
           <div className="forecast-section">
             <div className="fc-head">
               <div className="section-label" style={{ marginBottom: 0 }}>
-                12-Hour Forecast
+                City snapshot
               </div>
-              <span className="fc-src">FortyGuard forecast API</span>
+              <span className="fc-src">FortyGuard heatmap API</span>
             </div>
-            <p className="muted" style={{ marginTop: 10 }}>
-              {cityTemperatureC != null
-                ? `${cityTemperatureC.toFixed(1)}°C citywide snapshot. Hourly bars are not invented.`
-                : "Key not set — map still shows labelled street ΔT. No synthetic forecast."}
+            {cityTemperatureC != null ? (
+              <div className="tcard-val" style={{ color: "#E24B4A", marginTop: 10 }}>
+                {cityTemperatureC.toFixed(1)}°C
+              </div>
+            ) : (
+              <p className="muted" style={{ marginTop: 10 }}>
+                {forecastLoading
+                  ? "Loading citywide °C…"
+                  : fortyguardConfigured
+                    ? "Could not read city °C. Street ΔT on the map is still real."
+                    : "Key not set — map still shows labelled street ΔT."}
+              </p>
+            )}
+            <p className="tcard-sub" style={{ marginTop: 6 }}>
+              One lagged citywide mean. Hourly bars are not invented.
             </p>
           </div>
         </div>
