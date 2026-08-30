@@ -5,6 +5,7 @@ from typing import Optional
 
 from heatlens.clients.cache import ResponseCache
 from heatlens.clients.fortyguard import FortyGuardClient
+from heatlens.clients.nominatim import NominatimClient
 from heatlens.config import Settings, load_settings
 from heatlens.ml.registry import available_model_name, load_linear_regressor
 from heatlens.store import JsonSegmentStore, load_coefficients
@@ -32,6 +33,10 @@ def get_fortyguard(city_id=None) -> FortyGuardClient:
         base_url=settings.fortyguard_base_url,
         cache=get_cache(),
     )
+
+
+def get_nominatim() -> NominatimClient:
+    return NominatimClient(cache=get_cache())
 
 
 def try_coefficients():

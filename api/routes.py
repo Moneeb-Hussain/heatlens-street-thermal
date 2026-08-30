@@ -74,6 +74,21 @@ def list_cities():
     return {"cities": [row.model_dump() for row in cities_payload()]}
 
 
+@router.get("/street-name")
+def street_name(
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+):
+    client = deps.get_nominatim()
+    try:
+        name = client.street_name(lat, lon)
+    except Exception:
+        name = None
+    finally:
+        client.close()
+    return {"street": name, "source": "geocode"}
+
+
 @router.get("/segments", response_model=SegmentListOut)
 def list_segments(city: str = Query(..., min_length=1)):
     city_id = require_city(city).id
