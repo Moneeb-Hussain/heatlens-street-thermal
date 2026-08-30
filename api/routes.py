@@ -87,17 +87,23 @@ def list_segments(city: str = Query(..., min_length=1)):
 
 def _city_temperature_c(city_id, timestamp):
     settings = deps.get_settings()
-    if not settings.has_fortyguard():
+    if not settings.has_fortyguard_for(city_id):
         raise CapabilityUnavailable(
             "FORTYGUARD_NOT_CONFIGURED",
-            "Cannot read live temperature without FORTYGUARD_API_KEY.",
+            "Cannot read live temperature without FORTYGUARD_API_KEY_{0} (or FORTYGUARD_API_KEY).".format(
+                city_id.upper()
+            ),
         )
     city_obj = require_city(city_id)
     if timestamp:
         moment = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
     else:
-        moment = datetime.now(timezone.utc)
-    client = deps.get_fortyguard()
+        from ingest.fortyguard import default_heatmap_date
+
+        moment = datetime.fromisoformat(default_heatmap_date() + "T14:00:00+00:00")
+    client = deps.get_fortyguard(city_id)
     try:
         result = client.heatmap(
             city_obj,
@@ -213,10 +219,15 @@ def recommend(
 def validate_view(city: str = Query(..., min_length=1)):
     city_id = require_city(city).id
     segments = deps.get_store().list_segments(city_id)
+    model = None
+    try:
+        model = deps.try_linear()
+    except CapabilityUnavailable:
+        model = None
     pairs = [
         ValidatePairOut(
             image_id=item.image_id,
-            predicted_delta_t=None,
+            predicted_delta_t=model.predict_delta_t(item.features) if model else None,
             reference_delta_t=item.delta_t,
             validated=item.validated,
         ).model_dump()

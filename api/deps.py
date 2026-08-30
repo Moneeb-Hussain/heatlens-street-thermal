@@ -24,10 +24,11 @@ def get_cache() -> ResponseCache:
     return ResponseCache(get_settings().cache_path)
 
 
-def get_fortyguard() -> FortyGuardClient:
+def get_fortyguard(city_id=None) -> FortyGuardClient:
     settings = get_settings()
+    api_key = settings.fortyguard_api_key_for(city_id) if city_id else settings.fortyguard_api_key
     return FortyGuardClient(
-        api_key=settings.fortyguard_api_key,
+        api_key=api_key,
         base_url=settings.fortyguard_base_url,
         cache=get_cache(),
     )

@@ -122,6 +122,22 @@ def test_predict_features_with_coefficients(tmp_path, monkeypatch):
     assert abs(response.json()["delta_t"] - (-1.5)) < 1e-9
 
 
+def test_validate_fills_predicted_when_coefficients_exist(tmp_path, monkeypatch):
+    client = _client(
+        tmp_path,
+        monkeypatch,
+        coefficients={"intercept": 0, "canopy": -4, "asphalt": 2, "sky": 0, "building": 0},
+        segments=[_seg()],
+    )
+    response = client.get("/validate", params={"city": "phoenix"})
+    assert response.status_code == 200
+    pair = response.json()["pairs"][0]
+    assert pair["reference_delta_t"] == 4.2
+    assert pair["predicted_delta_t"] is not None
+    # 0 + (-4)*0.05 + 2*0.6 = 1.0
+    assert abs(pair["predicted_delta_t"] - 1.0) < 1e-9
+
+
 def test_recommend_ranks(tmp_path, monkeypatch):
     client = _client(
         tmp_path,

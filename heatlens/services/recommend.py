@@ -48,7 +48,10 @@ def rank_interventions(
     limit=50,
 ):
     estimates = [estimate_segment(s, coefficients, target_canopy_frac) for s in segments]
-    estimates.sort(key=lambda item: item.estimated_cooling_c, reverse=True)
+    if coefficients.canopy >= 0:
+        estimates.sort(key=lambda item: (item.current_delta_t, -item.current_canopy_frac), reverse=True)
+    else:
+        estimates.sort(key=lambda item: item.estimated_cooling_c, reverse=True)
     if limit is None:
         return estimates
     return estimates[: max(int(limit), 0)]

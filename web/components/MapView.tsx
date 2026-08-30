@@ -49,16 +49,14 @@ export default function MapView({ city, segments, selectedId, onSelect }: Props)
       style: {
         version: 8,
         sources: {
-          carto: {
+          osm: {
             type: "raster",
-            tiles: [
-              "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-            ],
+            tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
             tileSize: 256,
-            attribution: "© OpenStreetMap © CARTO",
+            attribution: "© OpenStreetMap contributors",
           },
         },
-        layers: [{ id: "carto", type: "raster", source: "carto" }],
+        layers: [{ id: "osm", type: "raster", source: "osm" }],
       },
       center: city ? [city.center_lon, city.center_lat] : [-112.074, 33.4484],
       zoom: 13,
@@ -77,6 +75,14 @@ export default function MapView({ city, segments, selectedId, onSelect }: Props)
     if (!map || !city) return;
     map.flyTo({ center: [city.center_lon, city.center_lat], zoom: 13, essential: true });
   }, [city]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !selectedId) return;
+    const chosen = segments.find((row) => row.image_id === selectedId);
+    if (!chosen) return;
+    map.flyTo({ center: [chosen.lon, chosen.lat], zoom: 15, essential: true });
+  }, [selectedId, segments]);
 
   useEffect(() => {
     const map = mapRef.current;

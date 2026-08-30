@@ -27,7 +27,11 @@ class Settings(object):
         return [part.strip() for part in self.allowed_origins.split(",") if part.strip()]
 
     def has_fortyguard(self) -> bool:
-        return self.fortyguard_api_key is not None
+        if self.fortyguard_api_key is not None:
+            return True
+        from heatlens.domain.cities import CITIES
+
+        return any(self.has_fortyguard_for(city.id) for city in CITIES)
 
     def fortyguard_api_key_for(self, city_id):
         """FortyGuard locks one account to one US state, chosen at signup and

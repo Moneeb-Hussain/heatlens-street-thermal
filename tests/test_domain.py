@@ -55,6 +55,14 @@ def test_recommend_ranks_lowest_canopy_first_when_beta_negative():
     assert abs(estimated_delta_t(0.05, 0.4, -8.0) - (-8.0 * 0.35)) < 1e-9
 
 
+def test_recommend_falls_back_to_hottest_when_canopy_not_negative():
+    coef = Coefficients(intercept=0, canopy=0.3, asphalt=1.0, sky=0.0, building=0.0, target_canopy_frac=0.4)
+    hot = _segment(image="hot", canopy=0.05, delta=5.0)
+    cool = _segment(image="cool", canopy=0.05, delta=-1.0)
+    ranked = rank_interventions([cool, hot], coef, limit=2)
+    assert ranked[0].image_id == "hot"
+
+
 def test_grid_spacing_is_about_50m():
     city = get_city("phoenix")
     points = grid_centroids(city.bbox, GRID_SPACING_M)

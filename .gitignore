@@ -1,5 +1,6 @@
 .env
 .venv/
+.venv-ml/
 venv/
 __pycache__/
 *.py[cod]

@@ -1,9 +1,11 @@
 import type {
   ApiError,
   City,
+  Forecast,
   Health,
   RecommendItem,
   Segment,
+  ValidateView,
 } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -42,4 +44,15 @@ export async function getRecommendations(city: string): Promise<RecommendItem[]>
     `/recommend?city=${encodeURIComponent(city)}`
   );
   return body.items;
+}
+
+export async function getForecast(city: string, timestamp?: string): Promise<Forecast> {
+  const query = timestamp
+    ? `/forecast?city=${encodeURIComponent(city)}&timestamp=${encodeURIComponent(timestamp)}`
+    : `/forecast?city=${encodeURIComponent(city)}`;
+  return request<Forecast>(query);
+}
+
+export async function getValidate(city: string): Promise<ValidateView> {
+  return request<ValidateView>(`/validate?city=${encodeURIComponent(city)}`);
 }

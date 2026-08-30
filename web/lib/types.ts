@@ -64,3 +64,27 @@ export type RecommendItem = {
   indicative: boolean;
   validated: boolean;
 };
+
+export type ForecastPoint = {
+  timestamp: string;
+  temperature_c: number;
+};
+
+export type Forecast = {
+  city: string;
+  source: string;
+  points: ForecastPoint[];
+};
+
+export type ValidatePair = {
+  image_id: string;
+  predicted_delta_t: number | null;
+  reference_delta_t: number;
+  validated: boolean;
+};
+
+export type ValidateView = {
+  city: string;
+  count: number;
+  pairs: ValidatePair[];
+};
