@@ -82,6 +82,30 @@ npm run dev
 
 http://localhost:3000 — city pill is **Atlanta, GA** and **Chicago, IL** only.
 
+### Deploy the website (Vercel)
+
+Config file: `web/vercel.json`. FastAPI does **not** run on Vercel — only the Next app. The API stays on Render/Railway/a VM.
+
+1. Push the repo to GitHub.
+2. [vercel.com/new](https://vercel.com/new) → Import the repo.
+3. **Root Directory:** `web` (Edit → select `web`). Framework: Next.js.
+4. Environment variable:
+
+   | Name | Value |
+   |---|---|
+   | `NEXT_PUBLIC_API_URL` | public URL of the running API, no trailing slash (e.g. `https://heatlens-api.onrender.com`) |
+
+5. Deploy.
+
+CLI from this repo:
+
+```bash
+cd web
+npx vercel
+```
+
+On the API host, add the Vercel origin to `HEATLENS_ALLOWED_ORIGINS` (comma-separated), e.g. `http://localhost:3000,https://your-app.vercel.app`, then restart uvicorn.
+
 ### 3. Data (if `data/` is empty)
 
 Photos and CSVs are gitignored (`delivery_*`, `data/labels.csv`, `data/segments.json`, `data/coefficients.json`).
