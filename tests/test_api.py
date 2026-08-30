@@ -17,6 +17,8 @@ def _client(tmp_path, monkeypatch, coefficients=None, segments=None):
     monkeypatch.setenv("HEATLENS_CACHE_PATH", str(tmp_path / "cache.sqlite"))
     monkeypatch.setenv("HEATLENS_ALLOWED_ORIGINS", "http://localhost:3000")
     monkeypatch.delenv("FORTYGUARD_API_KEY", raising=False)
+    monkeypatch.delenv("FORTYGUARD_API_KEY_ATLANTA", raising=False)
+    monkeypatch.delenv("FORTYGUARD_API_KEY_CHICAGO", raising=False)
     monkeypatch.delenv("MAPILLARY_ACCESS_TOKEN", raising=False)
     if coefficients is not None:
         (tmp_path / "coefficients.json").write_text(json.dumps(coefficients), encoding="utf-8")

@@ -219,6 +219,20 @@ body {
   z-index: 2;
 }
 
+.maplibregl-ctrl-attrib {
+  font-size: 10px;
+  opacity: 0.65;
+}
+
+.maplibregl-ctrl-attrib.maplibregl-compact .maplibregl-ctrl-attrib-inner {
+  display: none;
+}
+
+.maplibregl-ctrl-attrib.maplibregl-compact:hover .maplibregl-ctrl-attrib-inner,
+.maplibregl-ctrl-attrib.maplibregl-compact:focus-within .maplibregl-ctrl-attrib-inner {
+  display: inline;
+}
+
 .legend {
   position: absolute;
   bottom: 16px;
