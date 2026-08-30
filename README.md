@@ -84,29 +84,39 @@ npm run dev
 
 http://localhost:3000 — city pill is **Atlanta, GA** and **Chicago, IL** only.
 
-### Deploy the website (Vercel)
+### Deploy (Render API + Vercel UI)
 
-Config file: `web/vercel.json`. FastAPI does **not** run on Vercel — only the Next app. The API stays on Render/Railway/a VM.
+Commit `data/labels.csv`, `data/segments.json`, and `data/coefficients.json` so Render has map data.
 
-1. Push the repo to GitHub.
-2. [vercel.com/new](https://vercel.com/new) → Import the repo.
-3. **Root Directory:** `web` (Edit → select `web`). Framework: Next.js.
-4. Environment variable:
+**Render (API)** — blueprint: `render.yaml`
 
-   | Name | Value |
+1. [dashboard.render.com](https://dashboard.render.com) → **New → Blueprint** → this repo.
+2. Fill **2** secrets (prompted):
+
+   | Key | Value |
    |---|---|
-   | `NEXT_PUBLIC_API_URL` | public URL of the running API, no trailing slash (e.g. `https://heatlens-api.onrender.com`) |
+   | `FORTYGUARD_API_KEY_ATLANTA` | Georgia account |
+   | `FORTYGUARD_API_KEY_CHICAGO` | Illinois account |
 
-5. Deploy.
+   Paths, Python 3.12, FortyGuard URL, and `HEATLENS_ALLOWED_ORIGINS=*` are already in the blueprint.
+3. Copy the service URL, e.g. `https://heatlens-api.onrender.com` (no trailing slash).
 
-CLI from this repo:
+**Vercel (map)** — config: `web/vercel.json`
+
+1. [vercel.com/new](https://vercel.com/new) → Import the same repo.
+2. **Root Directory:** `web`.
+3. Fill **1** env:
+
+   | Key | Value |
+   |---|---|
+   | `NEXT_PUBLIC_API_URL` | the Render URL from step 3 |
+
+4. Deploy. Skip the 13 detected Python vars from `.env.example`.
 
 ```bash
 cd web
 npx vercel
 ```
-
-On the API host, add the Vercel origin to `HEATLENS_ALLOWED_ORIGINS` (comma-separated), e.g. `http://localhost:3000,https://your-app.vercel.app`, then restart uvicorn.
 
 ### 3. Data (if `data/` is empty)
 

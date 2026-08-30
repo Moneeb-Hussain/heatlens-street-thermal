@@ -24,7 +24,10 @@ class Settings(object):
         self._env = env  # kept for per-city FortyGuard key lookups below
 
     def origins(self) -> List[str]:
-        return [part.strip() for part in self.allowed_origins.split(",") if part.strip()]
+        parts = [part.strip() for part in self.allowed_origins.split(",") if part.strip()]
+        if "*" in parts:
+            return ["*"]
+        return parts
 
     def has_fortyguard(self) -> bool:
         if self.fortyguard_api_key is not None:

@@ -1,0 +1,38 @@
+# Render Blueprint — New → Blueprint → this repo.
+# Fill only the sync:false keys when prompted. Do not put secrets in this file.
+
+services:
+  - type: web
+    name: heatlens-api
+    runtime: python
+    plan: free
+    region: oregon
+    autoDeployTrigger: commit
+    buildCommand: pip install -e .
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.10"
+      - key: FORTYGUARD_BASE_URL
+        value: https://api.fortyguard.com
+      - key: HEATLENS_DATA_DIR
+        value: data
+      - key: HEATLENS_SEGMENTS_PATH
+        value: data/segments.json
+      - key: HEATLENS_LABELS_PATH
+        value: data/labels.csv
+      - key: HEATLENS_COEFFICIENTS_PATH
+        value: data/coefficients.json
+      - key: HEATLENS_CACHE_PATH
+        value: data/cache/heatlens.sqlite
+      - key: HEATLENS_MODEL_PATH
+        value: data/models/regressor.onnx
+      - key: HEATLENS_MAX_UPLOAD_BYTES
+        value: "5242880"
+      - key: HEATLENS_ALLOWED_ORIGINS
+        value: "*"
+      - key: FORTYGUARD_API_KEY_ATLANTA
+        sync: false
+      - key: FORTYGUARD_API_KEY_CHICAGO
+        sync: false

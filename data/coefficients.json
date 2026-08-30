@@ -1,0 +1,27 @@
+{
+  "intercept": -0.7555574502374056,
+  "canopy": -1.120915987796553,
+  "asphalt": 1.5655184112756193,
+  "sky": 0.9032959152350721,
+  "building": 0.7265127687416275,
+  "target_canopy_frac": 0.4,
+  "metrics": {
+    "train": {
+      "n": 1930,
+      "mae_c": 0.6213,
+      "r_squared": -0.2661
+    },
+    "test": {
+      "n": 481,
+      "mae_c": 0.4223,
+      "r_squared": 0.041
+    },
+    "fitted_at": "2026-08-30T05:01:55.332241+00:00",
+    "leaf_on_train": 101,
+    "by_city": {
+      "atlanta": 1525,
+      "chicago": 886
+    },
+    "note": "B1 pooled Atlanta+Chicago; summer-weighted; canopy clipped <= 0."
+  }
+}
