@@ -20,7 +20,10 @@ FRACTION_COLS = ("canopy_frac", "asphalt_frac", "sky_frac", "building_frac")
 def _has_fractions(row) -> bool:
     try:
         for col in FRACTION_COLS:
-            value = float(row.get(col) or "")
+            raw = row.get(col)
+            if raw is None or raw == "":
+                return False
+            value = float(raw)
             if value < 0.0 or value > 1.0:
                 return False
     except (TypeError, ValueError):
