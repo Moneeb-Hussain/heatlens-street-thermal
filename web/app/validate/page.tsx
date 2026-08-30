@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getCities, getValidate } from "@/lib/api";
 import { sortCities } from "@/lib/cities";
-import type { ValidatePair } from "@/lib/types";
+import type { City, ValidatePair } from "@/lib/types";
 
 function mae(pairs: ValidatePair[]): number | null {
   const scored = pairs.filter((row) => row.predicted_delta_t != null);
