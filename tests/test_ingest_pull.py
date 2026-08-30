@@ -3,10 +3,12 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from heatlens.config import Settings
 from heatlens.domain.cities import BoundingBox, City, get_city
+from heatlens.store import LABEL_COLUMNS
 from ingest.fortyguard import HEATMAP_DATE_LAG_DAYS, default_heatmap_date, delta_t_for_point, fetch_city_heatmap
 from ingest.imagery import download_city_photos
-from heatlens.ingest.build import _assign_split
+from heatlens.ingest.build import _assign_split, _backfill_delta_t
 
 
 def _tiny_phoenix():
@@ -222,3 +224,64 @@ def test_assign_split_is_deterministic_per_block():
     second = _assign_split(phoenix, "b_14_22")
     assert first == second
     assert first in ("train", "test")
+
+
+def test_backfill_delta_t_force_overwrites_only_target_city_and_records_query_date(tmp_path, monkeypatch):
+    """--force lets us re-test a city (e.g. Atlanta on a different date)
+    without touching another city's already-good rows, and the actual
+    FortyGuard query date must land in the CSV (Moneeb's requirement)."""
+    import csv
+    import ingest.fortyguard as fg_module
+
+    monkeypatch.chdir(tmp_path)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    labels_path = data_dir / "labels.csv"
+    fieldnames = list(LABEL_COLUMNS) + ["source", "validated"]
+    rows = [
+        {"image_id": "atl-1", "lat": "33.75", "lon": "-84.39", "city": "atlanta", "delta_t": "0.01", "t_ref_window": "14:00"},
+        {"image_id": "chi-1", "lat": "41.88", "lon": "-87.63", "city": "chicago", "delta_t": "0.5", "t_ref_window": "14:00"},
+    ]
+    with labels_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for r in rows:
+            writer.writerow({k: r.get(k, "") for k in fieldnames})
+
+    def fake_fetch(city, client, **kwargs):
+        assert kwargs["start_date"] == "2024-07-15"
+        assert kwargs["start_time"] == "14:00"
+        assert kwargs["granularity"] == 60
+        return {"fake": True}, 30.0
+
+    def fake_delta(result, city_mean, lat, lon):
+        return 5.0
+
+    monkeypatch.setattr(fg_module, "fetch_city_heatmap", fake_fetch)
+    monkeypatch.setattr(fg_module, "delta_t_for_point", fake_delta)
+
+    settings = Settings({
+        "HEATLENS_LABELS_PATH": str(labels_path),
+        "HEATLENS_CACHE_PATH": str(tmp_path / "cache.sqlite"),
+        "FORTYGUARD_API_KEY_ATLANTA": "ga-key",
+    })
+
+    rc = _backfill_delta_t(
+        [get_city("atlanta")],
+        settings,
+        heatmap_date="2024-07-15",
+        heatmap_time="14:00",
+        granularity=60,
+        force=True,
+    )
+    assert rc == 0
+
+    with labels_path.open(newline="", encoding="utf-8") as handle:
+        result_rows = {r["image_id"]: r for r in csv.DictReader(handle)}
+
+    assert result_rows["atl-1"]["delta_t"] == "5.0"
+    assert result_rows["atl-1"]["fg_query_date"] == "2024-07-15"
+    # chicago row must be completely untouched -- --force with --city atlanta
+    # must never overwrite another city's already-good data.
+    assert result_rows["chi-1"]["delta_t"] == "0.5"
+    assert result_rows["chi-1"].get("fg_query_date", "") == ""

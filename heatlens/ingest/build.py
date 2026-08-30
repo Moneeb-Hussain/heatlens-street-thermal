@@ -43,13 +43,42 @@ def main(argv=None) -> int:
         "for that city's state). Needs FORTYGUARD_API_KEY_<CITY_ID> (or FORTYGUARD_API_KEY) set "
         "for each city with rows to backfill.",
     )
+    parser.add_argument(
+        "--heatmap-date",
+        default=None,
+        help="FortyGuard start_date for --backfill-delta-t (YYYY-MM-DD). Default: "
+        "default_heatmap_date() (today minus a safe lag). Use this to test a specific "
+        "date, e.g. a hot summer afternoon, instead of the lagged-today default.",
+    )
+    parser.add_argument("--heatmap-time", default="14:00", help="FortyGuard start_time for --backfill-delta-t. Default: 14:00.")
+    parser.add_argument(
+        "--granularity",
+        type=int,
+        default=100,
+        choices=(60, 80, 100),
+        help="FortyGuard tile granularity in metres for --backfill-delta-t. Default: 100.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="With --backfill-delta-t: re-fetch and overwrite delta_t even for rows that "
+        "already have a value (e.g. re-testing a city on a different date). Only touches "
+        "the city/cities given via --city -- never affects other cities' rows.",
+    )
     args = parser.parse_args(argv)
 
     settings = load_settings()
     cities = [get_city(args.city)] if args.city else list(CITIES)
 
     if args.backfill_delta_t:
-        return _backfill_delta_t(cities, settings)
+        return _backfill_delta_t(
+            cities,
+            settings,
+            heatmap_date=args.heatmap_date,
+            heatmap_time=args.heatmap_time,
+            granularity=args.granularity,
+            force=args.force,
+        )
 
     if args.pull:
         return _pull(cities, settings, args)
@@ -86,7 +115,7 @@ def main(argv=None) -> int:
     return 0
 
 
-def _backfill_delta_t(cities, settings) -> int:
+def _backfill_delta_t(cities, settings, heatmap_date=None, heatmap_time="14:00", granularity=100, force=False) -> int:
     from ingest.fortyguard import default_heatmap_date, delta_t_for_point, fetch_city_heatmap
     from heatlens.clients.cache import ResponseCache
     from heatlens.clients.fortyguard import FortyGuardClient
@@ -98,8 +127,14 @@ def _backfill_delta_t(cities, settings) -> int:
 
     with labels_path.open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
-        fieldnames = reader.fieldnames
+        fieldnames = list(reader.fieldnames)
         rows = list(reader)
+
+    # Track which FortyGuard date each row's delta_t actually came from --
+    # essential once we're testing several candidate dates, so it's always
+    # clear (and auditable in the CSV itself) which query produced a value.
+    if "fg_query_date" not in fieldnames:
+        fieldnames.append("fg_query_date")
 
     wanted_city_ids = {c.id for c in cities}
     cache = ResponseCache(settings.cache_path)
@@ -116,31 +151,48 @@ def _backfill_delta_t(cities, settings) -> int:
                     )
                 )
                 continue
-            city_rows = [r for r in rows if r.get("city") == city.id and not (r.get("delta_t") or "").strip()]
+            if force:
+                city_rows = [r for r in rows if r.get("city") == city.id]
+            else:
+                city_rows = [r for r in rows if r.get("city") == city.id and not (r.get("delta_t") or "").strip()]
             if not city_rows:
                 continue
             fortyguard = FortyGuardClient(fg_key, settings.fortyguard_base_url, cache=cache)
             try:
-                query_date = default_heatmap_date()
-                heatmap_result, city_mean = fetch_city_heatmap(city, fortyguard, start_date=query_date, start_time="14:00")
+                query_date = heatmap_date or default_heatmap_date()
+                heatmap_result, city_mean = fetch_city_heatmap(
+                    city, fortyguard, start_date=query_date, start_time=heatmap_time, granularity=granularity
+                )
             except (CapabilityUnavailable, UpstreamError, ValidationFailed) as exc:
                 sys.stderr.write("{0}: FortyGuard heatmap unavailable ({1}) -- skipping.\n".format(city.id, exc))
                 fortyguard.close()
                 continue
             filled = 0
             failed = 0
+            deltas = []
             for row in city_rows:
                 try:
-                    row["delta_t"] = delta_t_for_point(heatmap_result, city_mean, float(row["lat"]), float(row["lon"]))
-                    row["t_ref_window"] = "14:00"
+                    dt = delta_t_for_point(heatmap_result, city_mean, float(row["lat"]), float(row["lon"]))
+                    row["delta_t"] = dt
+                    row["t_ref_window"] = heatmap_time
+                    row["fg_query_date"] = query_date
                     row["source"] = "mapillary+fortyguard"
                     row["validated"] = True
                     filled += 1
+                    deltas.append(dt)
                 except UpstreamError as exc:
                     sys.stderr.write("{0}: {1}\n".format(row.get("image_id"), exc))
                     failed += 1
             fortyguard.close()
-            summary.append({"city": city.id, "filled": filled, "failed": failed, "candidates": len(city_rows)})
+            summary.append({
+                "city": city.id,
+                "filled": filled,
+                "failed": failed,
+                "candidates": len(city_rows),
+                "date": query_date,
+                "min_dt": min(deltas) if deltas else None,
+                "max_dt": max(deltas) if deltas else None,
+            })
     finally:
         cache.close()
 
@@ -150,8 +202,15 @@ def _backfill_delta_t(cities, settings) -> int:
         writer.writerows(rows)
 
     for row in summary:
+        range_str = (
+            "range={0:.3f} (min={1:.3f} max={2:.3f})".format(row["max_dt"] - row["min_dt"], row["min_dt"], row["max_dt"])
+            if row["min_dt"] is not None
+            else "range=n/a"
+        )
         sys.stdout.write(
-            "{city:10}  filled={filled:4d}/{candidates:<4d}  failed={failed:4d}\n".format(**row)
+            "{city:10}  date={date}  filled={filled:4d}/{candidates:<4d}  failed={failed:4d}  {range_str}\n".format(
+                range_str=range_str, **row
+            )
         )
     sys.stdout.write("\nUpdated {0}\n".format(labels_path))
     return 0
